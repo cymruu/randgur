@@ -11,8 +11,6 @@ import (
 
 type Randgur struct {
 	httpClient  http.Client
-	queue       chan string
-	images      chan io.ReadCloser
 	workers     chan bool
 	concurrency uint8
 }
@@ -21,28 +19,19 @@ var nameChars []byte
 var randomSource rand.Source = rand.NewSource(time.Now().UnixNano())
 var random = rand.New(randomSource)
 
-func (c *Randgur) Start(guesses uint32) {
-	c.queue = make(chan string)
+func (c *Randgur) Start() {
 	c.workers = make(chan bool, c.concurrency)
-	var i uint32
-	for ; i < guesses; i++ {
-		go func() {
-			c.queue <- c.GuessImageID(7)
-		}()
-	}
 	for i := 0; i < cap(c.workers); i++ {
 		c.workers <- true
 	}
 	for {
 		select {
-		case imageID := <-c.queue:
-			<-c.workers
-			fmt.Printf("Got worker for fetching %s.jpg\n", imageID)
-			go func() { c.queue <- c.GuessImageID(5) }()
-			go func(imageID string) {
+		case <-c.workers:
+			// fmt.Printf("Starting new worker\n")
+			go func() {
 				defer func() { c.workers <- true }()
-				c.GetImage(imageID)
-			}(imageID)
+				c.GetImage()
+			}()
 		default:
 			fmt.Printf(".")
 			time.Sleep(50 * time.Millisecond)
@@ -73,9 +62,10 @@ func (c *Randgur) GuessImageID(size uint8) string {
 	}
 	return string(guess)
 }
-func (c *Randgur) GetImage(imgID string) {
+func (c *Randgur) GetImage() {
+	imgID := c.GuessImageID(7)
 	resp, err := c.httpClient.Get(fmt.Sprintf("https://i.imgur.com/%s.jpg/", imgID))
-	fmt.Printf("req for %s => %d", imgID, resp.StatusCode)
+	// fmt.Printf("req for %s => %d", imgID, resp.StatusCode)
 	if err != nil || resp.StatusCode == 302 {
 		return
 	}
@@ -85,6 +75,7 @@ func (c *Randgur) GetImage(imgID string) {
 		return
 	}
 	defer f.Close()
+	fmt.Printf("Found %s \n", imgID)
 	io.Copy(f, resp.Body)
 }
 func main() {
@@ -97,5 +88,7 @@ func main() {
 				return http.ErrUseLastResponse
 			}},
 		concurrency: 5}
-	client.Start(5)
+	client.Start()
+
+	fmt.Printf("Statystyki")
 }
