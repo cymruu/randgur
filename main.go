@@ -41,7 +41,7 @@ func (c *Randgur) Start() {
 func (c *Randgur) Stop() {
 
 }
-func Initialize() {
+func init() {
 	// uppercase A-Z
 	for i := 65; i <= 90; i++ {
 		nameChars = append(nameChars, byte(i))
@@ -79,8 +79,6 @@ func (c *Randgur) GetImage() {
 	io.Copy(f, resp.Body)
 }
 func main() {
-
-	Initialize()
 	client := Randgur{
 		httpClient: http.Client{
 			Timeout: 10 * time.Second,
