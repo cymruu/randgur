@@ -1,18 +1,30 @@
-package main
+package randgur
 
 import (
 	"fmt"
-	"io"
+	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"os"
 	"time"
 )
 
+type FoundCallbackT func(string, []byte)
 type Randgur struct {
-	httpClient  http.Client
+	HttpClient  http.Client
 	workers     chan bool
-	concurrency uint8
+	Concurrency uint8
+
+	FoundCallbacks []FoundCallbackT
+}
+
+func writeToFile(imgID string, body []byte) {
+	f, err := os.Create(fmt.Sprintf("./images/%s.jpg", imgID))
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+	f.Write(body)
 }
 
 var nameChars []byte
@@ -20,7 +32,7 @@ var randomSource rand.Source = rand.NewSource(time.Now().UnixNano())
 var random = rand.New(randomSource)
 
 func (c *Randgur) Start() {
-	c.workers = make(chan bool, c.concurrency)
+	c.workers = make(chan bool, c.Concurrency)
 	for i := 0; i < cap(c.workers); i++ {
 		c.workers <- true
 	}
@@ -33,13 +45,18 @@ func (c *Randgur) Start() {
 				c.GetImage()
 			}()
 		default:
-			fmt.Printf(".")
 			time.Sleep(50 * time.Millisecond)
 		}
 	}
 }
 func (c *Randgur) Stop() {
 
+}
+func (c *Randgur) RegisterCallback(cb FoundCallbackT) {
+	if c.FoundCallbacks == nil {
+		c.FoundCallbacks = make([]FoundCallbackT, 0)
+	}
+	c.FoundCallbacks = append(c.FoundCallbacks, cb)
 }
 func init() {
 	// uppercase A-Z
@@ -64,29 +81,15 @@ func (c *Randgur) GuessImageID(size uint8) string {
 }
 func (c *Randgur) GetImage() {
 	imgID := c.GuessImageID(7)
-	resp, err := c.httpClient.Get(fmt.Sprintf("https://i.imgur.com/%s.jpg/", imgID))
+	resp, err := c.HttpClient.Get(fmt.Sprintf("https://i.imgur.com/%s.jpg/", imgID))
 	// fmt.Printf("req for %s => %d", imgID, resp.StatusCode)
 	if err != nil || resp.StatusCode == 302 {
 		return
 	}
 	defer resp.Body.Close()
-	f, err := os.Create(fmt.Sprintf("./images/%s.jpg", imgID))
-	if err != nil {
-		return
-	}
-	defer f.Close()
-	fmt.Printf("Found %s \n", imgID)
-	io.Copy(f, resp.Body)
-}
-func main() {
-	client := Randgur{
-		httpClient: http.Client{
-			Timeout: 10 * time.Second,
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				return http.ErrUseLastResponse
-			}},
-		concurrency: 5}
-	client.Start()
 
-	fmt.Printf("Statystyki")
+	imageBytes, _ := ioutil.ReadAll(resp.Body)
+	for _, cb := range c.FoundCallbacks {
+		cb(imgID, imageBytes)
+	}
 }
