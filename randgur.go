@@ -82,7 +82,6 @@ func (c *Randgur) GuessImageID(size uint8) string {
 func (c *Randgur) GetImage() {
 	imgID := c.GuessImageID(7)
 	resp, err := c.HttpClient.Get(fmt.Sprintf("https://i.imgur.com/%s.jpg/", imgID))
-	// fmt.Printf("req for %s => %d", imgID, resp.StatusCode)
 	if err != nil || resp.StatusCode == 302 {
 		return
 	}
